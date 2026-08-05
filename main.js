@@ -56,19 +56,39 @@ revealItems.forEach((item) => revealObserver.observe(item));
 
 const fallbackImages = Array.from(document.querySelectorAll("img[data-fallback-srcs]"));
 
-fallbackImages.forEach((img) => {
-  const fallbackSources = (img.dataset.fallbackSrcs || "")
-    .split("|")
+const probeImageSource = (src) =>
+  new Promise((resolve) => {
+    if (!src) {
+      resolve(false);
+      return;
+    }
+
+    const test = new Image();
+    test.onload = () => resolve(true);
+    test.onerror = () => resolve(false);
+    test.src = src;
+  });
+
+const resolveBestImageSource = async (img) => {
+  const candidates = [img.getAttribute("src"), ...(img.dataset.fallbackSrcs || "").split("|")]
     .map((item) => item.trim())
     .filter(Boolean);
-  const sources = [img.getAttribute("src"), ...fallbackSources].filter(Boolean);
-  let currentIndex = 0;
 
-  img.addEventListener("error", () => {
-    currentIndex += 1;
-    if (currentIndex >= sources.length) return;
-    img.src = sources[currentIndex];
-  });
+  for (const candidate of candidates) {
+    // Try sources in order and stop at the first one that actually loads.
+    // This avoids relying on a late error listener and works on both local file:// and GitHub Pages.
+    // eslint-disable-next-line no-await-in-loop
+    if (await probeImageSource(candidate)) {
+      if (img.getAttribute("src") !== candidate) {
+        img.src = candidate;
+      }
+      return;
+    }
+  }
+};
+
+fallbackImages.forEach((img) => {
+  resolveBestImageSource(img);
 });
 
 const skillDrawButton = document.querySelector("#draw-skill");
