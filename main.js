@@ -69,8 +69,8 @@ const probeImageSource = (src) =>
     test.src = src;
   });
 
-const resolveBestImageSource = async (img) => {
-  const candidates = [img.getAttribute("src"), ...(img.dataset.fallbackSrcs || "").split("|")]
+const resolveBestImageSource = async (img, extraCandidates = []) => {
+  const candidates = [img.getAttribute("src"), ...extraCandidates, ...(img.dataset.fallbackSrcs || "").split("|")]
     .map((item) => item.trim())
     .filter(Boolean);
 
@@ -224,6 +224,21 @@ const openLightbox = (src, alt) => {
   document.body.style.overflow = "hidden";
 };
 
+const openLightboxWithCandidates = async (candidates, alt) => {
+  const bestSource = await (async () => {
+    for (const candidate of candidates) {
+      // Probe each candidate before showing the modal so we never flash a broken image.
+      // eslint-disable-next-line no-await-in-loop
+      if (await probeImageSource(candidate)) {
+        return candidate;
+      }
+    }
+    return candidates[0] || "";
+  })();
+
+  openLightbox(bestSource, alt);
+};
+
 const hideLightbox = () => {
   lightbox.hidden = true;
   lightboxImage.src = "";
@@ -232,9 +247,14 @@ const hideLightbox = () => {
 };
 
 projectShots.forEach((item) => {
-  item.addEventListener("click", () => {
+  item.addEventListener("click", async () => {
     const image = item.querySelector("img");
-    openLightbox(item.dataset.full || image.src, image.alt);
+    const fullSources = (item.dataset.fullSrcs || item.dataset.full || "")
+      .split("|")
+      .map((value) => value.trim())
+      .filter(Boolean);
+
+    await openLightboxWithCandidates([image.currentSrc || image.src, ...fullSources], image.alt);
   });
 });
 
